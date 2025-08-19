@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Open in Spotify – Options</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    .row { margin-bottom: 16px; max-width: 560px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px;
+    }
+    button { padding: 10px 14px; border: none; border-radius: 8px; cursor: pointer; background: #1DB954; font-weight: 700; }
+    .note { font-size: 13px; color: #555; }
+    .status { margin-top: 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Open in Spotify – Options</h1>
+  <p class="note">
+    <strong>Optional:</strong> Enter a Spotify Client ID and Secret (Client Credentials flow).
+    This lets the extension open the exact track page. Without these, it will open Spotify search results.
+  </p>
+
+  <div class="row">
+    <label for="clientId">Spotify Client ID</label>
+    <input type="text" id="clientId" placeholder="e.g. 123abc..." />
+  </div>
+  <div class="row">
+    <label for="clientSecret">Spotify Client Secret</label>
+    <input type="password" id="clientSecret" placeholder="••••••••••••" />
+  </div>
+
+  <button id="saveBtn">Save</button>
+  <div class="status" id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>
