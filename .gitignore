@@ -416,3 +416,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Firefox AMO
+web-ext-artifacts/
+amo-metadata.json

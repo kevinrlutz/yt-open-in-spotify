@@ -1,14 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Open in Spotify for YouTube",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Adds an 'Open in Spotify' button under YouTube music videos. Parses the title and opens the Spotify page for the song.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "permissions": ["storage", "tabs", "activeTab"],
+  "homepage_url": "https://github.com/kevinrlutz/yt-open-in-spotify",
+  "author": "Kevin Lutz",
+
+  "permissions": ["storage", "tabs", "activeTab", "identity"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://m.youtube.com/*",
@@ -29,8 +32,11 @@
       "run_at": "document_idle"
     }
   ],
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": true
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "open-spotify@kevinlutz.me", 
+      "strict_min_version": "115.0"
+    }
   }
 }
