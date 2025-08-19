@@ -1,0 +1,32 @@
+/* Minimal styling that fits YouTube's look without clashing */
+.open-spotify-btn-container {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.open-spotify-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 18px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  background: #1DB954; /* Spotify green */
+  color: #000;         /* Spotify uses black text on green */
+}
+
+.open-spotify-btn:hover {
+  filter: brightness(0.95);
+}
+
+.open-spotify-logo {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.open-spotify-logo svg {
+  fill: currentColor;
+}
