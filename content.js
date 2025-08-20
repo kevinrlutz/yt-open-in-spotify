@@ -1,114 +1,120 @@
-// content.js
+// content.js – robust YouTube SPA handling
 const ext = typeof browser !== 'undefined' ? browser : chrome;
 
 const BUTTON_ID = 'open-in-spotify-btn-yts';
+let currentVideoId = null;
 let lastUrl = location.href;
 
-// Common junk to strip from titles
-const COMMON_TAGS = [
-  'official video', 'official music video', 'music video', 'official audio', 'audio',
-  'lyrics', 'lyric video', 'visualizer', 'mv', 'pv', 'hd', '4k', 'remastered',
-  'prod.', 'prod', 'prod by', 'live performance', 'live', 'cover', 'teaser'
-];
-
-function stripEmojis(s) {
-  // remove most emoji/pictographs/symbols
-  return s.replace(/[\p{Extended_Pictographic}\u200D]/gu, '');
+// --- early guard: only act on /watch pages
+if (!location.pathname.startsWith('/watch')) {
+  // Still install observers to catch SPA navigation into /watch
+  const urlWatch = setInterval(() => {
+    if (location.pathname.startsWith('/watch')) {
+      clearInterval(urlWatch);
+      scheduleInject();
+    }
+  }, 300);
 }
 
+
+// ---- utils ----
+const parseVideoId = () => new URL(location.href).searchParams.get('v');
+
+function elementReady(selector, within = document, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    const found = within.querySelector(selector);
+    if (found) return resolve(found);
+
+    const obs = new MutationObserver(() => {
+      const el = within.querySelector(selector);
+      if (el) {
+        obs.disconnect();
+        resolve(el);
+      }
+    });
+
+    obs.observe(within, { childList: true, subtree: true });
+
+    if (timeoutMs) {
+      setTimeout(() => {
+        obs.disconnect();
+        // Resolve anyway; caller will retry gracefully
+        resolve(null);
+      }, timeoutMs);
+    }
+  });
+}
+
+function stripEmojis(s) {
+  return s.replace(/[\p{Extended_Pictographic}\u200D]/gu, '');
+}
 function removeBracketedJunk(s) {
-  // remove (...) and [...] chunks that contain common tags or year-only
+  const COMMON_TAGS = [
+    'official video','official music video','music video','official audio','audio',
+    'lyrics','lyric video','visualizer','mv','pv','hd','4k','remastered',
+    'prod.','prod','prod by','live performance','live','cover','teaser'
+  ];
   return s.replace(/[\(\[]([^\)\]]+)[\)\]]/g, (m, inner) => {
     const low = inner.toLowerCase();
     const isJunk = COMMON_TAGS.some(tag => low.includes(tag)) || /^\s*\d{4}\s*$/.test(inner);
     return isJunk ? '' : ` ${inner} `;
   }).replace(/\s{2,}/g, ' ').trim();
 }
-
 function sanitizeTitle(raw) {
   if (!raw) return '';
   let t = raw;
-
   t = stripEmojis(t);
   t = t.replace(/["“”]+/g, '');
   t = removeBracketedJunk(t);
-
-  // Remove "feat." sections outside brackets
   t = t.replace(/\s+(feat\.?|ft\.?)\s+.+$/i, '');
-
-  // Remove trailing " - Topic" or similar
   t = t.replace(/\s+-\s+topic$/i, '');
-
   return t.trim();
 }
-
 function extractTrackAndArtist(title, channelName) {
   const t = sanitizeTitle(title);
   if (!t) return { track: null, artist: null, rawQuery: null };
-
-  // Pattern: Artist - Track
   const dash = t.split(/\s+-\s+/);
   if (dash.length === 2) {
     const [left, right] = dash;
-    if (left && right) {
-      return { track: right.trim(), artist: left.trim(), rawQuery: `${right.trim()} ${left.trim()}` };
-    }
+    if (left && right) return { track: right.trim(), artist: left.trim(), rawQuery: `${right.trim()} ${left.trim()}` };
   }
-
-  // Pattern: Track by Artist
   const byMatch = t.match(/(.+)\s+by\s+(.+)/i);
   if (byMatch) {
     const track = byMatch[1].trim();
     const artist = byMatch[2].trim();
     return { track, artist, rawQuery: `${track} ${artist}` };
   }
-
-  // Fallback: use channel name to bias artist if it looks like an artist channel
+  const cleanedChannel = (channelName || '').replace(/\s+-\s+topic$/i, '').trim() || null;
   const track = t;
-  let artist = null;
-
-  if (channelName) {
-    // Drop suffixes like " - Topic"
-    const cleanedChannel = channelName.replace(/\s+-\s+topic$/i, '').trim();
-    artist = cleanedChannel;
-  }
-
+  const artist = cleanedChannel;
   const rawQuery = artist ? `${track} ${artist}` : track;
   return { track, artist, rawQuery };
 }
-
 function getChannelName() {
-  const owner = document.querySelector('ytd-video-owner-renderer a');
-  if (owner && owner.textContent) return owner.textContent.trim();
-  // Alternate selector
-  const alt = document.querySelector('#channel-name a');
-  return alt?.textContent?.trim() || null;
+  return (
+    document.querySelector('ytd-video-owner-renderer a')?.textContent?.trim() ||
+    document.querySelector('#channel-name a')?.textContent?.trim() ||
+    null
+  );
+}
+function getVideoTitleText() {
+  return (
+    document.querySelector('h1.ytd-watch-metadata yt-formatted-string')?.textContent?.trim() ||
+    document.querySelector('h1.ytd-watch-metadata')?.textContent?.trim() ||
+    document.querySelector('h1.title')?.textContent?.trim() ||
+    ''
+  );
 }
 
-function getVideoTitle() {
-  // New YouTube UI
-  const el = document.querySelector('h1.ytd-watch-metadata yt-formatted-string')
-         || document.querySelector('h1.ytd-watch-metadata')
-         || document.querySelector('h1.title');
-  return el?.textContent?.trim() || '';
+// ---- mounting ----
+function removeButton() {
+  document.getElementById(BUTTON_ID)?.remove();
 }
 
-function insertButton() {
-  if (document.getElementById(BUTTON_ID)) return;
-
-  // Anchor: below the title block within ytd-watch-metadata
-  const meta = document.querySelector('ytd-watch-metadata');
-  if (!meta) return;
-
-  const titleNode =
-    meta.querySelector('h1.ytd-watch-metadata') ||
-    meta.querySelector('#title') ||
-    meta;
-
+function createButton() {
   const container = document.createElement('div');
   container.id = BUTTON_ID;
   container.className = 'open-spotify-btn-container';
-
   container.innerHTML = `
     <button class="open-spotify-btn" type="button" title="Open on Spotify">
       <span class="open-spotify-logo" aria-hidden="true">
@@ -119,57 +125,95 @@ function insertButton() {
       <span>Open in Spotify</span>
     </button>
   `;
-
-  // Place it right under the title (and above the rest of the metadata)
-  titleNode.insertAdjacentElement('afterend', container);
-
   const btn = container.querySelector('button.open-spotify-btn');
   btn.addEventListener('click', () => {
-    const title = getVideoTitle();
+    const title = getVideoTitleText();
     const channel = getChannelName();
     const payload = extractTrackAndArtist(title, channel);
-    ext.runtime.sendMessage({
-      type: 'OPEN_SPOTIFY_FOR_TITLE',
-      payload
-    });
+    ext.runtime.sendMessage({ type: 'OPEN_SPOTIFY_FOR_TITLE', payload });
   });
+  return container;
 }
 
-function onNavigate() {
-  // Reset and try to inject again for the new video
-  removeButton();
-  waitForMetaAndInsert();
-}
+let injectQueued = false;
+async function injectButton() {
+  injectQueued = false; // clear flag
+  // Ensure we're on a watch page and have a video id
+  const vid = parseVideoId();
+  if (!vid) return;
 
-function removeButton() {
-  const el = document.getElementById(BUTTON_ID);
-  if (el && el.parentNode) el.parentNode.removeChild(el);
-}
-
-function waitForMetaAndInsert(tries = 0) {
-  if (document.querySelector('ytd-watch-metadata')) {
-    insertButton();
-    return;
+  // If video changed, remove old button
+  if (currentVideoId !== vid) {
+    currentVideoId = vid;
+    removeButton();
   }
-  if (tries > 40) return; // ~8s max
-  setTimeout(() => waitForMetaAndInsert(tries + 1), 200);
+
+  // Wait for the metadata/title area to exist
+  const meta = await elementReady('ytd-watch-metadata');
+  if (!meta) return; // will be retried by observers
+
+  // Find a stable anchor under the title
+  const anchor =
+    meta.querySelector('h1.ytd-watch-metadata') ||
+    meta.querySelector('h1') ||
+    meta.querySelector('#title') ||
+    meta;
+
+  if (!anchor) return;
+
+  // If already present in the correct place, stop
+  if (document.getElementById(BUTTON_ID)?.isConnected) return;
+
+  const node = createButton();
+  anchor.insertAdjacentElement('afterend', node);
 }
 
-// Observe URL changes (YouTube SPA)
-const urlObserver = setInterval(() => {
+// throttle reschedules to avoid hammering
+function scheduleInject() {
+  if (injectQueued) return;
+  injectQueued = true;
+  // Two RAFs let Polymer finish a render turn before we probe
+  requestAnimationFrame(() => requestAnimationFrame(injectButton));
+}
+
+// ---- observers & navigation hooks ----
+
+// 1) React to YouTube’s SPA navigation events if present
+window.addEventListener('yt-navigate-start', () => { scheduleInject(); }, true);
+window.addEventListener('yt-navigate-finish', () => { scheduleInject(); }, true);
+window.addEventListener('yt-page-data-updated', () => { scheduleInject(); }, true);
+
+// 2) Fallback: observe large structural changes (title block is inside ytd-app)
+const rootObserver = new MutationObserver((mutList) => {
+  // If title/meta re-rendered or URL changed, try again
+  for (const m of mutList) {
+    if (m.type === 'childList') {
+      if ([...m.addedNodes, ...m.removedNodes].some(n =>
+        n.nodeType === 1 && (
+          n.matches?.('ytd-watch-metadata, ytd-watch-flexy, #primary-inner, #title') ||
+          n.querySelector?.('ytd-watch-metadata, ytd-watch-flexy, #primary-inner, #title')
+        )
+      )) {
+        scheduleInject();
+        break;
+      }
+    }
+  }
+});
+rootObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+// 3) Fallback: URL poller (YouTube sometimes suppresses events)
+setInterval(() => {
   if (lastUrl !== location.href) {
     lastUrl = location.href;
-    onNavigate();
+    scheduleInject();
   }
-}, 500);
+}, 400);
 
-// Listen to YouTube’s SPA navigation event if available
-window.addEventListener('yt-navigate-finish', onNavigate);
-
-waitForMetaAndInsert();
-
-// Also handle major DOM changes to re-insert if YouTube re-renders title block
-const mo = new MutationObserver(() => {
-  if (!document.getElementById(BUTTON_ID)) insertButton();
+// 4) When tab becomes visible again, ensure button exists
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) scheduleInject();
 });
-mo.observe(document.documentElement, { childList: true, subtree: true });
+
+// First run (very early, run_at=document_start)
+scheduleInject();

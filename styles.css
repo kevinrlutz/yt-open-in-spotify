@@ -2,6 +2,7 @@
 .open-spotify-btn-container {
   margin-top: 8px;
   margin-bottom: 4px;
+  display: block;
 }
 
 .open-spotify-btn {
